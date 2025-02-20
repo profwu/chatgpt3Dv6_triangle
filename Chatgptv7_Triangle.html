@@ -1,0 +1,264 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <title>3D數學幾何遊戲 - 實心三角形 (v7 移動功能)</title>
+    <!-- 載入 Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+      body { margin: 0; overflow: hidden; }
+      #ui {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+        background: rgba(255,255,255,0.8);
+        padding: 10px;
+        border-radius: 5px;
+      }
+      #ui button { margin: 3px; }
+    </style>
+  </head>
+  <body>
+    <!-- UI 介面 -->
+    <div id="ui">
+      <button id="btnRandom">隨機產生新物件</button>
+      <button id="btnTop">上視圖</button>
+      <button id="btnBottom">下視圖</button>
+      <button id="btnLeft">左視圖</button>
+      <button id="btnRight">右視圖</button>
+      <br>
+      <button id="btnVolume">計算體積</button>
+      <button id="btnSurface">計算面積</button>
+      <br>
+      <button id="btnScaleUp">放大</button>
+      <button id="btnScaleDown">縮小</button>
+      <br>
+      <!-- 新增移動按鈕 -->
+      <button id="btnMoveUp">Move Up</button>
+      <button id="btnMoveDown">Move Down</button>
+      <button id="btnMoveLeft">Move Left</button>
+      <button id="btnMoveRight">Move Right</button>
+      <br>
+      <div id="info" style="margin-top:10px;"></div>
+    </div>
+
+    <script>
+      // 基本 Three.js 設定
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xeeeeee);
+      const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+      camera.position.set(5, 5, 10);
+      camera.lookAt(0, 0, 0);
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      // 全域變數：存放目前的 3D 實心三角形物件群組
+      let objGroup = new THREE.Group();
+      scene.add(objGroup);
+
+      let isAnimating = false;
+      const animationDuration = 300; // 毫秒
+
+      // 建立光源
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+      directionalLight.position.set(10, 10, 5);
+      scene.add(directionalLight);
+
+      // 產生隨機實心三角形（利用擠出 2D 三角形形成 3D 物件）
+      function generateRandomObject() {
+        // 移除現有物件
+        scene.remove(objGroup);
+        objGroup = new THREE.Group();
+        scene.add(objGroup);
+
+        // 產生隨機三角形底面（在 XY 平面，z = 0）
+        // 固定第一點在 (0,0)
+        const v0 = new THREE.Vector2(0, 0);
+        // 第二點在 x 軸上，隨機 1~2 之間
+        const x1 = Math.random() + 1;
+        const v1 = new THREE.Vector2(x1, 0);
+        // 第三點隨機，y 保證不為 0，避免共線（範圍：0.5~2）
+        const x2 = Math.random() + 0.5;
+        const y2 = Math.random() + 0.5;
+        const v2 = new THREE.Vector2(x2, y2);
+
+        // 建立 2D 三角形 Shape
+        const shape = new THREE.Shape();
+        shape.moveTo(v0.x, v0.y);
+        shape.lineTo(v1.x, v1.y);
+        shape.lineTo(v2.x, v2.y);
+        shape.lineTo(v0.x, v0.y);
+
+        // 擠出參數（設定厚度 depth）
+        const depth = Math.random() + 0.5;  // 0.5 ~ 1.5
+        const extrudeSettings = {
+          depth: depth,
+          bevelEnabled: false
+        };
+
+        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        geometry.computeVertexNormals();
+
+        // 隨機選色（避免與背景同色）
+        const material = new THREE.MeshLambertMaterial({ color: new THREE.Color(Math.random(), Math.random(), Math.random()) });
+        const solidTriangle = new THREE.Mesh(geometry, material);
+        objGroup.add(solidTriangle);
+
+        // 儲存底面頂點與厚度以便計算體積與表面積
+        objGroup.userData.baseVertices = [v0, v1, v2];
+        objGroup.userData.depth = depth;
+      }
+
+      // 初始產生一個實心三角形物件
+      generateRandomObject();
+
+      // 動畫函數：群組旋轉 90°（沿指定軸）
+      function animateRotation(axis, angle) {
+        if (isAnimating) return;
+        isAnimating = true;
+        const startRotation = objGroup.rotation[axis];
+        const endRotation = startRotation + angle;
+        const startTime = performance.now();
+
+        function update() {
+          const elapsed = performance.now() - startTime;
+          const t = Math.min(elapsed / animationDuration, 1);
+          objGroup.rotation[axis] = startRotation + angle * t;
+          if (t < 1) {
+            requestAnimationFrame(update);
+          } else {
+            objGroup.rotation[axis] = endRotation;
+            isAnimating = false;
+          }
+        }
+        update();
+      }
+
+      // 鍵盤事件：上下左右旋轉（每次 90°）
+      window.addEventListener('keydown', (e) => {
+        if (isAnimating) return;
+        switch(e.key) {
+          case 'ArrowUp':
+            animateRotation('x', -Math.PI/2);
+            break;
+          case 'ArrowDown':
+            animateRotation('x', Math.PI/2);
+            break;
+          case 'ArrowLeft':
+            animateRotation('y', -Math.PI/2);
+            break;
+          case 'ArrowRight':
+            animateRotation('y', Math.PI/2);
+            break;
+        }
+      });
+
+      // 視圖按鈕：設定 camera 位置
+      function setView(view) {
+        switch(view) {
+          case 'top':
+            camera.position.set(0, 10, 0.001);
+            break;
+          case 'bottom':
+            camera.position.set(0, -10, 0.001);
+            break;
+          case 'left':
+            camera.position.set(-10, 0, 0);
+            break;
+          case 'right':
+            camera.position.set(10, 0, 0);
+            break;
+        }
+        camera.lookAt(0, 0, 0);
+      }
+      document.getElementById('btnTop').addEventListener('click', () => setView('top'));
+      document.getElementById('btnBottom').addEventListener('click', () => setView('bottom'));
+      document.getElementById('btnLeft').addEventListener('click', () => setView('left'));
+      document.getElementById('btnRight').addEventListener('click', () => setView('right'));
+
+      // 隨機產生新物件
+      document.getElementById('btnRandom').addEventListener('click', () => {
+        objGroup.rotation.set(0, 0, 0);
+        generateRandomObject();
+      });
+
+      // 計算體積與表面積
+      // 體積 = (底面面積) * (深度)
+      // 底面面積計算：對三角形，面積 = |(v0.x*(v1.y-v2.y)+v1.x*(v2.y-v0.y)+v2.x*(v0.y-v1.y))| / 2
+      // 表面積 = 2 * (底面面積) + (底面周長) * (深度)
+      document.getElementById('btnVolume').addEventListener('click', () => {
+        const [v0, v1, v2] = objGroup.userData.baseVertices;
+        const depth = objGroup.userData.depth;
+        const baseArea = Math.abs(v0.x * (v1.y - v2.y) + v1.x * (v2.y - v0.y) + v2.x * (v0.y - v1.y)) / 2;
+        const volume = baseArea * depth;
+        document.getElementById('info').innerText = "體積：" + volume.toFixed(3);
+      });
+      document.getElementById('btnSurface').addEventListener('click', () => {
+        const [v0, v1, v2] = objGroup.userData.baseVertices;
+        const depth = objGroup.userData.depth;
+        const baseArea = Math.abs(v0.x * (v1.y - v2.y) + v1.x * (v2.y - v0.y) + v2.x * (v0.y - v1.y)) / 2;
+        const d01 = v0.distanceTo(v1);
+        const d12 = v1.distanceTo(v2);
+        const d20 = v2.distanceTo(v0);
+        const perimeter = d01 + d12 + d20;
+        const surface = 2 * baseArea + perimeter * depth;
+        document.getElementById('info').innerText = "表面積：" + surface.toFixed(3);
+      });
+
+      // 放大與縮小功能：調整群組 scale
+      document.getElementById('btnScaleUp').addEventListener('click', () => {
+        objGroup.scale.multiplyScalar(1.2);
+      });
+      document.getElementById('btnScaleDown').addEventListener('click', () => {
+        objGroup.scale.multiplyScalar(0.8);
+      });
+
+      // 新增移動功能：每次移動 0.5 單位
+      const moveDistance = 0.5;
+      document.getElementById('btnMoveUp').addEventListener('click', () => {
+        objGroup.position.y += moveDistance;
+      });
+      document.getElementById('btnMoveDown').addEventListener('click', () => {
+        objGroup.position.y -= moveDistance;
+      });
+      document.getElementById('btnMoveLeft').addEventListener('click', () => {
+        objGroup.position.x -= moveDistance;
+      });
+      document.getElementById('btnMoveRight').addEventListener('click', () => {
+        objGroup.position.x += moveDistance;
+      });
+
+      // 點擊刪除功能：利用 raycaster 點擊移除該物件
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+      function onMouseClick(event) {
+        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(objGroup.children);
+        if (intersects.length > 0) {
+          objGroup.remove(intersects[0].object);
+        }
+      }
+      window.addEventListener('click', onMouseClick, false);
+
+      // 畫面自動調整
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth/window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      // 渲染迴圈
+      function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+      }
+      animate();
+    </script>
+  </body>
+</html>
